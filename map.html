@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Wildfires in California</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBx-VcDFwhH3b7obq3aAnj1m8874HQ3vgM"></script>
+    <style>
+      /* Set the size of the map */
+      #map {
+        height: 600px;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      function initMap() {
+        const map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 6,
+          center: { lat: 36.7783, lng: -119.4179 }, // Centered on California
+          styles: [/* Add your preferred map styles here, for monochrome or muted colors */]
+        });
+
+        // Fetch the GeoJSON data from the Cloud Function
+        map.data.loadGeoJson('https://us-central1-sf-live-charts.cloudfunctions.net/serveNIFCGeojson');
+
+        // Style the GeoJSON data
+        map.data.setStyle({
+          fillColor: 'red',
+          strokeWeight: 1
+        });
+
+        // Limit the map's viewport to California's borders
+        const strictBounds = new google.maps.LatLngBounds(
+          new google.maps.LatLng(32.5343, -124.4096),
+          new google.maps.LatLng(42.0095, -114.1308)
+        );
+
+        google.maps.event.addListener(map, 'dragend', function() {
+          if (strictBounds.contains(map.getCenter())) return;
+
+          const c = map.getCenter(),
+                x = c.lng(),
+                y = c.lat(),
+                maxX = strictBounds.getNorthEast().lng(),
+                maxY = strictBounds.getNorthEast().lat(),
+                minX = strictBounds.getSouthWest().lng(),
+                minY = strictBounds.getSouthWest().lat();
+
+          let newX = x,
+              newY = y;
+
+          if (x < minX) newX = minX;
+          if (x > maxX) newX = maxX;
+          if (y < minY) newY = minY;
+          if (y > maxY) newY = maxY;
+
+          map.setCenter(new google.maps.LatLng(newY, newX));
+        });
+      }
+
+      google.maps.event.addDomListener(window, 'load', initMap);
+    </script>
+  </body>
+</html>
