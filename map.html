@@ -17,8 +17,16 @@
       function initMap() {
         const map = new google.maps.Map(document.getElementById('map'), {
           zoom: 6,
-          center: { lat: 36.7783, lng: -119.4179 }, // Centered on California
-          styles: [/* Add your preferred map styles here, for monochrome or muted colors */]
+          center: { lat: 36.7783, lng: -119.4179 },
+          styles: [
+            {
+                "featureType": "all",
+                "stylers": [
+                    { "saturation": -80 },
+                    { "lightness": 40 }
+                ]
+            }
+          ]
         });
 
         // Fetch the GeoJSON data from the Cloud Function
@@ -56,6 +64,38 @@
           if (y > maxY) newY = maxY;
 
           map.setCenter(new google.maps.LatLng(newY, newX));
+        });
+
+        const infoWindow = new google.maps.InfoWindow();
+
+        map.data.addListener('mouseover', function(event) {
+          const incidentName = event.feature.getProperty('poly_IncidentName');
+          const contentString = `<strong>${incidentName} Fire</strong>`;
+          infoWindow.setContent(contentString);
+          infoWindow.setPosition(event.latLng);
+          infoWindow.open(map);
+        });
+
+        map.data.addListener('click', function(event) {
+          const polyName = event.feature.getProperty('poly_IncidentName');
+          const attrName = event.feature.getProperty('attr_IncidentName');
+          const acres = Math.round(event.feature.getProperty('poly_GISAcres'));
+          const percentContained = event.feature.getProperty('attr_PercentContained');
+          const cause = event.feature.getProperty('attr_FireCause');
+          const description = event.feature.getProperty('attr_IncidentShortDescription');
+
+          let contentString = `<strong>${polyName} Fire</strong><br>`;
+          if (polyName.toLowerCase() !== attrName.toLowerCase()) {
+            contentString += `... part of the ${attrName}.<br>`;
+          }
+          contentString += `${acres} acres burned.<br>`;
+          contentString += `${percentContained}% contained.<br>`;
+          contentString += `Cause: ${cause}<br>`;
+          contentString += `${description}`;
+
+          infoWindow.setContent(contentString);
+          infoWindow.setPosition(event.latLng);
+          infoWindow.open(map);
         });
       }
     </script>
