@@ -2,7 +2,7 @@
 <html>
   <head>
     <title>Wildfires in California</title>
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBx-VcDFwhH3b7obq3aAnj1m8874HQ3vgM"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBx-VcDFwhH3b7obq3aAnj1m8874HQ3vgM&callback=initMap" async defer></script>
     <style>
       /* Set the size of the map */
       #map {
@@ -58,8 +58,6 @@
           map.setCenter(new google.maps.LatLng(newY, newX));
         });
       }
-
-      google.maps.event.addDomListener(window, 'load', initMap);
     </script>
   </body>
 </html>
