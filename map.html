@@ -17,8 +17,10 @@
     <div id="map"></div>
     <script>
         function initMap() {
+            const isMobile = window.innerWidth <= 480;
+
             const map = new google.maps.Map(document.getElementById('map'), {
-                zoom: 6,
+                zoom: isMobile ? 5 : 6, // Adjust zoom for mobile
                 center: {
                     lat: 36.7783,
                     lng: -119.4179
@@ -280,7 +282,9 @@
                             }
                         ]
                     }
-                ]
+                ],
+                streetViewControl: false, // Disable Street View button
+                mapTypeId: 'terrain' // Set default layer to terrain
             });
 
             // Fetch the GeoJSON data from the Cloud Function
@@ -288,8 +292,8 @@
 
             // Style the GeoJSON data
             map.data.setStyle({
-                fillColor: 'rgba(255,165,0,0.6)', // Orange with 60% opacity
-                strokeColor: 'rgba(255,165,0,0.9)', // Orange with 90% opacity
+                fillColor: 'rgba(255,165,0,0.6)', 
+                strokeColor: 'rgba(255,165,0,0.9)', 
                 strokeWeight: 1
             });
 
@@ -321,7 +325,17 @@
                 map.setCenter(new google.maps.LatLng(newY, newX));
             });
 
-            const infoWindow = new google.maps.InfoWindow();
+            const infoWindow = new google.maps.InfoWindow({
+                pixelOffset: new google.maps.Size(0, -30) // Adjust info window position
+            });
+
+            // Adjust font size for mobile
+            if (isMobile) {
+                infoWindow.setOptions({
+                    maxWidth: 150,
+                    fontSize: '14px'
+                });
+            }
 
             map.data.addListener('mouseover', function(event) {
                 const incidentName = event.feature.getProperty('poly_IncidentName');
