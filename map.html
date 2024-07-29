@@ -10,6 +10,11 @@
             height: 600px;
             width: 100%;
         }
+
+        /* Hide the close button for the onhover InfoWindow */
+        .no-close .gm-ui-hover-effect {
+            display: none !important;
+        }
     </style>
 </head>
 
@@ -325,30 +330,51 @@
                 map.setCenter(new google.maps.LatLng(newY, newX));
             });
 
-            const infoWindow = new google.maps.InfoWindow({
-                pixelOffset: new google.maps.Size(0, -30) // Adjust info window position
+            const hoverInfoWindow = new google.maps.InfoWindow({
+                pixelOffset: new google.maps.Size(0, -30), // Adjust info window position
+                maxWidth: 150,
+                disableAutoPan: true, // Prevent auto panning on hover
+                zIndex: 1 // Ensure the hover info window is below the click info window
             });
-
-            // Adjust font size for mobile
-            if (isMobile) {
-                infoWindow.setOptions({
-                    maxWidth: 150,
-                    fontSize: '14px'
-                });
-            }
 
             map.data.addListener('mouseover', function(event) {
                 const incidentName = event.feature.getProperty('poly_IncidentName');
                 const contentString = `<strong>${incidentName} Fire</strong>`;
-                infoWindow.setContent(contentString);
-                infoWindow.setPosition(event.latLng);
-                infoWindow.open(map);
+                hoverInfoWindow.setContent(contentString);
+                hoverInfoWindow.setPosition(event.latLng);
+                hoverInfoWindow.open(map);
+            });
+
+            const clickInfoWindow = new google.maps.InfoWindow({
+                pixelOffset: new google.maps.Size(0, -30), // Adjust info window position
+                zIndex: 2, // Ensure the click info window is above the hover info window
+                maxWidth: isMobile ? 150 : 200, // Adjust width for mobile
+                enableEventPropagation: true // Allow map interaction
             });
 
             map.data.addListener('click', function(event) {
+                console.log('Feature properties:');
+                event.feature.forEachProperty(function(value, name) {
+                    console.log(name + ': ' + value);
+                });
+
                 const polyName = event.feature.getProperty('poly_IncidentName');
                 const attrName = event.feature.getProperty('attr_IncidentName');
-                const acres = Math.round(event.feature.getProperty('poly_GISAcres')).toLocaleString(); // Add comma separator
+                
+                // Get the acreage value and check its type
+                const acresRaw = event.feature.getProperty('poly_GISAcres');
+                let acres = 'N/A'; // Default value if parsing fails
+                
+                if (acresRaw) {
+                    const acresParsed = parseFloat(acresRaw);
+                    if (!isNaN(acresParsed)) {
+                        acres = Math.round(acresParsed).toLocaleString(); // Round to nearest whole number and format
+                    }
+                }
+
+                console.log('Acreage raw value:', acresRaw); // Debugging: check the raw value
+                console.log('Acreage formatted:', acres); // Debugging: check the formatted value
+
                 const percentContained = event.feature.getProperty('attr_PercentContained');
                 const cause = event.feature.getProperty('attr_FireCause');
                 const description = event.feature.getProperty('attr_IncidentShortDescription');
@@ -362,9 +388,9 @@
                 contentString += `Cause: ${cause}<br>`;
                 contentString += `${description}`;
 
-                infoWindow.setContent(contentString);
-                infoWindow.setPosition(event.latLng);
-                infoWindow.open(map);
+                clickInfoWindow.setContent(contentString);
+                clickInfoWindow.setPosition(event.latLng);
+                clickInfoWindow.open(map);
             });
         }
     </script>
