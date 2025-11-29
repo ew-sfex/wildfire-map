@@ -3,6 +3,16 @@
 
 <head>
     <title>Wildfires in California</title>
+    <!-- 
+    SECURITY NOTE: Google Maps API key should be restricted in Google Cloud Console:
+    1. Go to console.cloud.google.com/apis/credentials
+    2. Find this API key (AIzaSyBx-VcDFwhH3b7obq3aAnj1m8874HQ3vgM)
+    3. Under "Application restrictions" select "HTTP referrers"
+    4. Add: *.sfexaminer.com/* and www.sfexaminer.com/*
+    5. Under "API restrictions" select "Restrict key" and enable only:
+       - Maps JavaScript API
+    This prevents unauthorized usage and protects against billing abuse.
+    -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBx-VcDFwhH3b7obq3aAnj1m8874HQ3vgM&callback=initMap" async defer></script>
     <style>
         /* Set the size of the map */
@@ -292,8 +302,37 @@
                 mapTypeId: 'terrain' // Set default layer to terrain
             });
 
-            // Fetch the GeoJSON data from the Cloud Function
-            map.data.loadGeoJson('https://us-central1-sf-live-charts.cloudfunctions.net/serveNIFCGeojson');
+            // Add loading indicator
+            const loadingDiv = document.createElement('div');
+            loadingDiv.id = 'loading';
+            loadingDiv.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.8);color:#fff;padding:20px 30px;border-radius:8px;font-family:sans-serif;z-index:1000;';
+            loadingDiv.textContent = 'Loading wildfire data...';
+            document.body.appendChild(loadingDiv);
+
+            // Fetch the GeoJSON data with error handling
+            fetch('https://us-central1-sf-live-charts.cloudfunctions.net/serveNIFCGeojson')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Failed to load fire data: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    map.data.addGeoJson(data);
+                    document.body.removeChild(loadingDiv);
+                    
+                    // Show last updated timestamp
+                    const updateDiv = document.createElement('div');
+                    updateDiv.id = 'last-update';
+                    updateDiv.style.cssText = 'position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,0.7);color:#fff;padding:8px 12px;border-radius:4px;font-size:12px;font-family:sans-serif;z-index:999;';
+                    updateDiv.textContent = `Data updated: ${new Date().toLocaleString()}`;
+                    document.body.appendChild(updateDiv);
+                })
+                .catch(error => {
+                    console.error('Error loading wildfire data:', error);
+                    loadingDiv.textContent = '⚠️ Unable to load wildfire data. Please refresh the page.';
+                    loadingDiv.style.background = 'rgba(207,66,54,0.9)'; // SF Examiner red
+                });
 
             // Style the GeoJSON data
             map.data.setStyle({
