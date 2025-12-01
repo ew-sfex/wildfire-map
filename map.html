@@ -683,8 +683,10 @@
             const MAPBOX_TOKEN = window.MAPBOX_ACCESS_TOKEN || document.body.dataset.mapboxToken || '';
             const DATAWRAPPER_CHART_ID = document.body.dataset.datawrapperChart || '';
             const TOP_FIRE_LIMIT = Number(document.body.dataset.topFires || 5);
-            // Use NIFC ArcGIS endpoint directly - filtered to current perimeters for California
-            const GEOJSON_ENDPOINT = 'https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?where=attr_POOState%3D%27US-CA%27&outFields=*&f=geojson';
+            // NIFC ArcGIS endpoints - perimeters (polygons) and incident locations (points)
+            const STATE_ABBREV = 'CA';
+            const PERIMETERS_ENDPOINT = `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?where=attr_POOState%3D%27US-${STATE_ABBREV}%27&outFields=*&f=geojson`;
+            const INCIDENTS_ENDPOINT = `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query?where=POOState%3D%27US-${STATE_ABBREV}%27&outFields=*&f=geojson`;
             const DAY_MS = 86_400_000;
             const SIZE_BUCKETS = [
                 { id: 'mega', label: 'Mega • 100k+ acres', min: 100_000, max: null, color: '#ff4d4f' },
@@ -766,7 +768,7 @@
 
             map.on('load', async () => {
                 try {
-                    const geojson = await fetchWildfireData();
+                    const geojson = await fetchAndMergeWildfireData();
                     enrichFeatureProperties(geojson);
                     state.geojson = geojson;
                     rebuildFeatureLookup();
@@ -885,12 +887,60 @@
                 });
             }
 
-            async function fetchWildfireData() {
-                const response = await fetch(GEOJSON_ENDPOINT, { headers: { Accept: 'application/json' } });
-                if (!response.ok) {
-                    throw new Error(`${response.status} ${response.statusText}`);
+            async function fetchAndMergeWildfireData() {
+                // Fetch both perimeters (polygons) and incident points in parallel
+                const [perimetersRes, incidentsRes] = await Promise.all([
+                    fetch(PERIMETERS_ENDPOINT, { headers: { Accept: 'application/json' } }),
+                    fetch(INCIDENTS_ENDPOINT, { headers: { Accept: 'application/json' } })
+                ]);
+
+                if (!perimetersRes.ok) {
+                    throw new Error(`Perimeters: ${perimetersRes.status} ${perimetersRes.statusText}`);
                 }
-                return response.json();
+                if (!incidentsRes.ok) {
+                    throw new Error(`Incidents: ${incidentsRes.status} ${incidentsRes.statusText}`);
+                }
+
+                const perimeters = await perimetersRes.json();
+                const incidents = await incidentsRes.json();
+
+                // Build a set of incident names that have perimeters
+                const perimeterNames = new Set(
+                    perimeters.features.map(f => 
+                        (f.properties.poly_IncidentName || '').toLowerCase().trim()
+                    ).filter(Boolean)
+                );
+
+                console.log(`Perimeters: ${perimeters.features.length}, Incident points: ${incidents.features.length}`);
+
+                // Add incident points that DON'T have perimeters (avoid duplicates)
+                const pointsWithoutPerimeters = incidents.features.filter(f => {
+                    const name = (f.properties.IncidentName || '').toLowerCase().trim();
+                    return !perimeterNames.has(name);
+                });
+
+                console.log(`Points without perimeters: ${pointsWithoutPerimeters.length}`);
+
+                // Normalize incident point properties to match perimeter schema
+                pointsWithoutPerimeters.forEach(f => {
+                    const props = f.properties;
+                    props.poly_IncidentName = props.IncidentName;
+                    props.poly_GISAcres = props.DailyAcres || props.CalculatedAcres || props.IncidentSize || 0;
+                    props.attr_PercentContained = props.PercentContained;
+                    props.attr_FireCause = props.FireCause;
+                    props.attr_POOState = props.POOState;
+                    props.attr_POOCounty = props.POOCounty;
+                    props.__isPoint = true;
+                });
+
+                // Combine: perimeters first, then points without perimeters
+                const combined = {
+                    type: 'FeatureCollection',
+                    features: [...perimeters.features, ...pointsWithoutPerimeters]
+                };
+
+                console.log(`Combined total: ${combined.features.length} fires`);
+                return combined;
             }
 
             function enrichFeatureProperties(geojson) {
@@ -994,15 +1044,23 @@
             function initWildfireLayers() {
                 if (!state.geojson) return;
                 const acresExpr = ['coalesce', ['to-number', ['get', '__acres']], 0];
+                const isPolygon = ['any', 
+                    ['==', ['geometry-type'], 'Polygon'],
+                    ['==', ['geometry-type'], 'MultiPolygon']
+                ];
+                const isPoint = ['==', ['geometry-type'], 'Point'];
 
                 if (!map.getSource('wildfires')) {
                     map.addSource('wildfires', { type: 'geojson', data: state.geojson });
-                    // 1. Symbol for small fires (Zoom < 8)
+                    
+                    // === POLYGON LAYERS (fire perimeters) ===
+                    
+                    // 1. Symbol for small polygon fires (Zoom < 8)
                     map.addLayer({
                         id: 'wildfire-small-symbol',
                         type: 'symbol',
                         source: 'wildfires',
-                        filter: ['<', acresExpr, SMALL_FIRE_ACRES],
+                        filter: ['all', isPolygon, ['<', acresExpr, SMALL_FIRE_ACRES]],
                         maxzoom: 8,
                         layout: {
                             'text-field': '×',
@@ -1019,24 +1077,24 @@
                         }
                     });
 
-                    // 2. Fill for LARGE fires (Always visible)
+                    // 2. Fill for LARGE polygon fires (Always visible)
                     map.addLayer({
                         id: 'wildfire-fill-large',
                         type: 'fill',
                         source: 'wildfires',
-                        filter: ['>=', acresExpr, SMALL_FIRE_ACRES],
+                        filter: ['all', isPolygon, ['>=', acresExpr, SMALL_FIRE_ACRES]],
                         paint: {
                             'fill-color': '#ff8c42',
                             'fill-opacity': 0.6
                         }
-                    }, 'wildfire-small-symbol'); // Below symbol
+                    }, 'wildfire-small-symbol');
 
-                    // 3. Fill for SMALL fires (Zoom >= 8 only)
+                    // 3. Fill for SMALL polygon fires (Zoom >= 8 only)
                     map.addLayer({
                         id: 'wildfire-fill-small',
                         type: 'fill',
                         source: 'wildfires',
-                        filter: ['<', acresExpr, SMALL_FIRE_ACRES],
+                        filter: ['all', isPolygon, ['<', acresExpr, SMALL_FIRE_ACRES]],
                         minzoom: 8,
                         paint: {
                             'fill-color': '#ff8c42',
@@ -1044,12 +1102,12 @@
                         }
                     }, 'wildfire-small-symbol');
 
-                    // 4. Outline for LARGE fires (Always visible)
+                    // 4. Outline for LARGE polygon fires (Always visible)
                     map.addLayer({
                         id: 'wildfire-outline-large',
                         type: 'line',
                         source: 'wildfires',
-                        filter: ['>=', acresExpr, SMALL_FIRE_ACRES],
+                        filter: ['all', isPolygon, ['>=', acresExpr, SMALL_FIRE_ACRES]],
                         paint: {
                             'line-color': '#b11226',
                             'line-width': 1.5,
@@ -1057,17 +1115,57 @@
                         }
                     });
 
-                    // 5. Outline for SMALL fires (Zoom >= 8 only)
+                    // 5. Outline for SMALL polygon fires (Zoom >= 8 only)
                     map.addLayer({
                         id: 'wildfire-outline-small',
                         type: 'line',
                         source: 'wildfires',
-                        filter: ['<', acresExpr, SMALL_FIRE_ACRES],
+                        filter: ['all', isPolygon, ['<', acresExpr, SMALL_FIRE_ACRES]],
                         minzoom: 8,
                         paint: {
                             'line-color': '#b11226',
                             'line-width': 1.5,
                             'line-opacity': 0.9
+                        }
+                    });
+
+                    // === POINT LAYERS (incidents without perimeters) ===
+                    
+                    // 6. Circle markers for point incidents
+                    map.addLayer({
+                        id: 'wildfire-point-circle',
+                        type: 'circle',
+                        source: 'wildfires',
+                        filter: isPoint,
+                        paint: {
+                            'circle-radius': [
+                                'interpolate', ['linear'], ['zoom'],
+                                4, 6,
+                                10, 12
+                            ],
+                            'circle-color': '#ff8c42',
+                            'circle-opacity': 0.8,
+                            'circle-stroke-color': '#b11226',
+                            'circle-stroke-width': 2,
+                            'circle-stroke-opacity': 0.9
+                        }
+                    });
+
+                    // 7. Fire icon for point incidents
+                    map.addLayer({
+                        id: 'wildfire-point-symbol',
+                        type: 'symbol',
+                        source: 'wildfires',
+                        filter: isPoint,
+                        layout: {
+                            'text-field': '🔥',
+                            'text-size': [
+                                'interpolate', ['linear'], ['zoom'],
+                                4, 12,
+                                10, 18
+                            ],
+                            'text-allow-overlap': true,
+                            'text-ignore-placement': true
                         }
                     });
                 } else {
@@ -1086,7 +1184,9 @@
                 const clickableLayers = [
                     'wildfire-small-symbol',
                     'wildfire-fill-large',
-                    'wildfire-fill-small'
+                    'wildfire-fill-small',
+                    'wildfire-point-circle',
+                    'wildfire-point-symbol'
                 ];
 
                 // Global click handler - query all wildfire layers
@@ -1309,6 +1409,12 @@
                 if (!map.getLayer('wildfire-fill-large')) return;
 
                 const acresExpr = ['coalesce', ['to-number', ['get', '__acres']], 0];
+                const isPolygon = ['any', 
+                    ['==', ['geometry-type'], 'Polygon'],
+                    ['==', ['geometry-type'], 'MultiPolygon']
+                ];
+                const isPoint = ['==', ['geometry-type'], 'Point'];
+                
                 const baseFilters = ['all'];
                 const sizeFilter = buildSizeFilterExpression();
                 const containmentFilter = buildContainmentFilterExpression();
@@ -1318,16 +1424,26 @@
                 if (containmentFilter) baseFilters.push(containmentFilter);
                 if (timelineFilter) baseFilters.push(timelineFilter);
 
-                // Large fires filter (>= SMALL_FIRE_ACRES)
-                const largeFilter = [...baseFilters, ['>=', acresExpr, SMALL_FIRE_ACRES]];
-                // Small fires filter (< SMALL_FIRE_ACRES)
-                const smallFilter = [...baseFilters, ['<', acresExpr, SMALL_FIRE_ACRES]];
+                // Polygon layers: Large fires (>= SMALL_FIRE_ACRES)
+                const largePolyFilter = ['all', isPolygon, ...baseFilters.slice(1), ['>=', acresExpr, SMALL_FIRE_ACRES]];
+                // Polygon layers: Small fires (< SMALL_FIRE_ACRES)
+                const smallPolyFilter = ['all', isPolygon, ...baseFilters.slice(1), ['<', acresExpr, SMALL_FIRE_ACRES]];
+                // Point layers
+                const pointFilter = ['all', isPoint, ...baseFilters.slice(1)];
 
-                map.setFilter('wildfire-fill-large', largeFilter);
-                map.setFilter('wildfire-outline-large', largeFilter);
-                map.setFilter('wildfire-fill-small', smallFilter);
-                map.setFilter('wildfire-outline-small', smallFilter);
-                map.setFilter('wildfire-small-symbol', smallFilter);
+                map.setFilter('wildfire-fill-large', largePolyFilter);
+                map.setFilter('wildfire-outline-large', largePolyFilter);
+                map.setFilter('wildfire-fill-small', smallPolyFilter);
+                map.setFilter('wildfire-outline-small', smallPolyFilter);
+                map.setFilter('wildfire-small-symbol', smallPolyFilter);
+                
+                // Point layers
+                if (map.getLayer('wildfire-point-circle')) {
+                    map.setFilter('wildfire-point-circle', pointFilter);
+                }
+                if (map.getLayer('wildfire-point-symbol')) {
+                    map.setFilter('wildfire-point-symbol', pointFilter);
+                }
             }
 
             function buildSizeFilterExpression() {
