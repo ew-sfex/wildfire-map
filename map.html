@@ -683,8 +683,25 @@
             const MAPBOX_TOKEN = window.MAPBOX_ACCESS_TOKEN || document.body.dataset.mapboxToken || '';
             const DATAWRAPPER_CHART_ID = document.body.dataset.datawrapperChart || '';
             const TOP_FIRE_LIMIT = Number(document.body.dataset.topFires || 5);
-            // NIFC ArcGIS endpoints - perimeters (polygons) and incident locations (points)
+            
+            // ============================================================
+            // STATE-SPECIFIC CONFIGURATION
+            // ============================================================
+            const STATE_NAME = 'California';
             const STATE_ABBREV = 'CA';
+            // California bounding box: SW corner to NE corner
+            const STATE_BOUNDS = [
+                [-124.5, 32.5],  // Southwest: San Diego area
+                [-114.0, 42.0]   // Northeast: Oregon border
+            ];
+            // Expanded bounds to prevent panning too far outside the state
+            const MAX_BOUNDS = [
+                [-128.0, 30.0],  // Southwest limit (Pacific Ocean)
+                [-111.0, 45.0]   // Northeast limit
+            ];
+            // ============================================================
+            
+            // NIFC ArcGIS endpoints - perimeters (polygons) and incident locations (points)
             const PERIMETERS_ENDPOINT = `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?where=attr_POOState%3D%27US-${STATE_ABBREV}%27&outFields=*&f=geojson`;
             const INCIDENTS_ENDPOINT = `https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query?where=POOState%3D%27US-${STATE_ABBREV}%27&outFields=*&f=geojson`;
             const DAY_MS = 86_400_000;
@@ -745,9 +762,10 @@
             const map = new mapboxgl.Map({
                 container: 'map',
                 style: MAPBOX_STYLES[state.baseStyle],
-                center: [-119.5, 37.2], // Center of California
-                zoom: 5,
-                minZoom: 4,
+                bounds: STATE_BOUNDS,
+                fitBoundsOptions: { padding: 20 },
+                maxBounds: MAX_BOUNDS,
+                minZoom: 5,
                 attributionControl: false
             });
 
