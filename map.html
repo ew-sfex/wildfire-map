@@ -476,6 +476,22 @@
             line-height: 1.2;
         }
 
+        .popup-source {
+            margin: 6px 0 0 0;
+            font-size: var(--font-xs);
+            color: var(--muted);
+            line-height: 1.2;
+        }
+
+        .popup-source a {
+            color: #7cb3ff;
+            text-decoration: none;
+        }
+
+        .popup-source a:hover {
+            text-decoration: underline;
+        }
+
         @media (max-width: 1100px) {
             .hud {
                 width: min(320px, calc(100% - 28px));
@@ -1271,7 +1287,8 @@
                     <p class="popup-meta">${containment}</p>
                     <p class="popup-meta">Cause: ${cause}</p>
                     ${location ? `<p class="popup-meta">${location}</p>` : ''}
-                    ${isPointOnly ? `<p class="popup-note">Perimeter data not yet available</p>` : ''}
+                    ${isPointOnly ? `<p class="popup-note">Perimeter data not available</p>` : ''}
+                    <p class="popup-source">Source: <a href="https://data-nifc.opendata.arcgis.com/" target="_blank" rel="noopener">NIFC</a></p>
                 </div>
                 `;
             }
