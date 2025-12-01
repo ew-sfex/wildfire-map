@@ -946,6 +946,12 @@
                 };
 
                 console.log(`Combined total: ${combined.features.length} fires`);
+                
+                // Debug: check __isPoint values
+                const pointCount = combined.features.filter(f => f.properties.__isPoint === true).length;
+                const nonPointCount = combined.features.filter(f => f.properties.__isPoint === false).length;
+                console.log(`DEBUG: __isPoint=true: ${pointCount}, __isPoint=false: ${nonPointCount}`);
+                
                 return combined;
             }
 
