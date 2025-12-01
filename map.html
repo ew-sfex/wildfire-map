@@ -689,10 +689,10 @@
             // ============================================================
             const STATE_NAME = 'California';
             const STATE_ABBREV = 'CA';
-            // California bounding box: SW corner to NE corner
+            // California bounding box: SW corner to NE corner (tighter for mobile)
             const STATE_BOUNDS = [
-                [-124.5, 32.5],  // Southwest: San Diego area
-                [-114.0, 42.0]   // Northeast: Oregon border
+                [-124.8, 32.2],  // Southwest: below San Diego
+                [-113.5, 42.2]   // Northeast: above Oregon border
             ];
             // Expanded bounds to prevent panning too far outside the state
             const MAX_BOUNDS = [
@@ -1024,6 +1024,14 @@
 
             function computeCentroid(geometry) {
                 if (!geometry) return null;
+                
+                // Handle Point geometry directly
+                if (geometry.type === 'Point') {
+                    const [lng, lat] = geometry.coordinates || [];
+                    return (lng !== undefined && lat !== undefined) ? { lng, lat } : null;
+                }
+                
+                // Handle Polygon/MultiPolygon
                 let coords = [];
                 if (geometry.type === 'Polygon') {
                     coords = geometry.coordinates?.[0] || [];
