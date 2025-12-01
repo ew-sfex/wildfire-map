@@ -5,7 +5,7 @@
 
 ## Overview
 
-Interactive Google Maps visualization showing active California wildfires in real-time. The map displays fire perimeters, acreage, containment status, and cause information sourced from the National Interagency Fire Center (NIFC).
+Interactive Mapbox GL experience showing active California wildfires in real-time. The page now renders a terrain/satellite basemap, overlays fire perimeters from the National Interagency Fire Center (NIFC), and layers Examiner-branded analytics (stats panel, top fires list, Datawrapper chart, filters, timeline slider, and air-quality tiles).
 
 **Live Map:** [View on SF Examiner](https://www.sfexaminer.com/wildfire-map) *(update with actual URL)*
 
@@ -13,41 +13,75 @@ Interactive Google Maps visualization showing active California wildfires in rea
 
 ## Features
 
-- **Real-time data** from NIFC via Google Cloud Function
-- **Interactive fire perimeters** with click for details
-- **Hover tooltips** showing fire names
-- **Mobile responsive** with adjusted zoom and info windows
-- **California-focused** with boundary restrictions
-- **Dark theme** for better fire visibility
-- **Loading indicators** and error handling
+- **Live data feed** from the `serveNIFCGeojson` Cloud Function (NIFC perimeters, acreage, containment, metadata)
+- **Mapbox GL renderer** with terrain/satellite toggle, CA max bounds, custom dark styling
+- **Severity-driven symbology** (5 acreage buckets) plus interactive chip filters & containment dropdown
+- **HUD analytics**: statewide totals, top 5 largest fires, Datawrapper year-to-date chart embed
+- **Timeline slider** to scrub discovery dates and show how the season evolves
+- **Air-quality overlay** (AQICN raster tiles) with quick toggle
+- **Loading + error states** and “last updated” badge for data freshness
 
 ---
 
-## 🔒 Security Setup (CRITICAL)
+## Legacy Google Maps snapshot (Nov 2025)
 
-### Google Maps API Key Restriction
+The previous version used Google Maps JS with a static dark terrain style:
 
-The API key in `map.html` is currently **unrestricted** and visible in the source code. This poses security and billing risks.
+- **Entry point:** `map.html` called `initMap()` to mount Google Maps, apply custom styling, disable Street View, and clamp panning to California’s bounding box.
+- **Data ingestion:** Fetched the same `serveNIFCGeojson` endpoint, added the features via `map.data.addGeoJson`, and showed a modal loading overlay plus a simple “last updated” label.
+- **Symbology:** All perimeters were rendered with the same orange fill/stroke; no acreage/containment awareness.
+- **Interactions:** Hover/click `InfoWindow`s displayed name, acreage, containment, cause, and description. Mobile tweaks were handled via `isMobile`.
+- **UX guards:** Strict map bounds, but no analytics panes, color legend, filters, timeline, or AQ layer.
 
-**To secure it:**
+## Mapbox HUD (Dec 2025)
 
-1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
-2. Find API key: `AIzaSyBx-VcDFwhH3b7obq3aAnj1m8874HQ3vgM`
-3. Click **Edit**
-4. Under **Application restrictions**:
-   - Select **HTTP referrers (web sites)**
-   - Add these referrers:
-     ```
-     *.sfexaminer.com/*
-     www.sfexaminer.com/*
-     localhost:* (for testing)
-     ```
-5. Under **API restrictions**:
-   - Select **Restrict key**
-   - Enable **only**: Maps JavaScript API
-6. Click **Save**
+`map.html` now ships with a full Mapbox GL HUD:
 
-**Result:** The key will only work on sfexaminer.com domains, preventing unauthorized usage.
+1. **Stats & top fires panel (`#stats-panel`)**
+   - Aggregates statewide totals and lists the top N incidents by acreage.
+   - Hosts an optional Datawrapper embed for year-to-date acres burned (configurable chart ID).
+2. **Severity-aware symbology**
+   - Five acreage buckets defined in `SIZE_BUCKETS`.
+   - Chip filters sync with Mapbox `setFilter` calls so the colors/legend stay in lockstep.
+3. **Filters & overlays panel (`#legend-panel`)**
+   - Contains the containment dropdown and the AQ toggle.
+   - AQ overlay loads AQICN raster tiles (swap with your preferred provider/opacity).
+4. **Timeline slider (`#timeline-panel`)**
+   - Parses discovery timestamps (multiple candidate fields) and lets readers scrub to “fires discovered through” a given date.
+5. **Basemap toggle**
+   - Terrain vs. Satellite Mapbox styles; listeners rehydrate wildfire + AQ layers after every style swap.
+
+All HUD blocks are mobile-friendly: on narrow screens the map becomes 60vh and panels stack beneath while retaining functionality.
+
+---
+
+## 🔐 Configuration & security
+
+### Mapbox access token (required)
+
+`map.html` reads `window.MAPBOX_ACCESS_TOKEN` (or `data-mapbox-token=""` on `<body>`) before Mapbox GL initializes. Create a **scoped token** in the [Mapbox dashboard](https://account.mapbox.com/access-tokens/) and limit it to:
+
+- Allowed URLs: `https://www.sfexaminer.com/*`, `https://sfexaminer.com/*`, `http://localhost:*`
+- Allowed scopes: **Styles: Read**, **Tilesets: Read**, **Datasets: Read** (no write scopes needed)
+
+Embed the token either by:
+
+```html
+<script>window.MAPBOX_ACCESS_TOKEN = 'pk.xxx-your-token';</script>
+<script src="/wildfire-map/map.html" defer></script>
+```
+
+or by server-side templating the `data-mapbox-token` attribute.
+
+### Datawrapper embed (optional)
+
+Set `data-datawrapper-chart="<chartID>"` (or `window.DATAWRAPPER_CHART_ID`) to load the YTD acres-burned line chart in the stats panel. Leave blank to hide the embed.
+
+### Top fires limit & other knobs
+
+- `data-top-fires="5"` controls how many fires appear in the “Largest active fires” list.
+- Air-quality overlay currently uses the public AQICN **demo** token (`tiles.aqicn.org`). Swap in your paid token if you have one.
+- All HUD controls and overlays load client-side only after the GeoJSON fetch succeeds; no server secrets are exposed.
 
 ---
 
@@ -89,27 +123,35 @@ The API key in `map.html` is currently **unrestricted** and visible in the sourc
 
 ### 1. **Fire Severity Indicators**
 
+_Status: ✅ Completed via `SIZE_BUCKETS` severity palette + legend chips._
+
 **Current:** All fires shown in same orange color  
 **Improvement:** Color-code by severity/size
 
 ```javascript
-map.data.setStyle(feature => {
-  const acres = parseFloat(feature.getProperty('poly_GISAcres'));
-  let color = 'rgba(255,165,0,0.6)'; // Default orange
-  
-  if (acres > 100000) color = 'rgba(139,0,0,0.7)';      // Dark red: mega fires
-  else if (acres > 10000) color = 'rgba(255,69,0,0.7)'; // Red-orange: major
-  else if (acres > 1000) color = 'rgba(255,140,0,0.6)'; // Orange: significant
-  
-  return {
-    fillColor: color,
-    strokeColor: color.replace('0.6', '0.9'),
-    strokeWeight: 1
-  };
-});
+const SIZE_BUCKETS = [
+  { id: 'mega', min: 100_000, color: '#641220' },
+  { id: 'major', min: 50_000, color: '#b21e35' },
+  { id: 'large', min: 10_000, color: '#d94f30' },
+  { id: 'medium', min: 1_000, color: '#f29e4c' },
+  { id: 'small', min: 0, color: '#f6c177' }
+];
+
+function buildSeverityExpression() {
+  const acresExpr = ['coalesce', ['to-number', ['get', '__acres']], 0];
+  const expression = ['case'];
+  SIZE_BUCKETS.forEach(bucket => {
+    expression.push(['>=', acresExpr, bucket.min]);
+    expression.push(bucket.color);
+  });
+  expression.push('#f6c177');
+  return expression;
+}
 ```
 
 ### 2. **Filter Controls**
+
+_Status: ✅ Completed via chip filters + containment dropdown._
 
 Add UI controls to filter fires by:
 - **Size** (slider: 0-100k+ acres)
@@ -145,6 +187,8 @@ If CalFire provides evacuation data:
 
 ### 6. **Air Quality Integration**
 
+_Status: ✅ Completed via AQICN raster overlay toggle._
+
 Show AQI (Air Quality Index) overlays:
 - Pull from PurpleAir or AirNow API
 - Color-code regions by air quality
@@ -175,6 +219,31 @@ Side-by-side or overlay comparison:
 - This year vs last year same date
 - Current season vs historical average
 - Show fire perimeter growth over time
+
+---
+
+## Stretch roadmap: fire weather, search, history
+
+### 8. Fire-weather overlays (winds, humidity, temperature)
+
+- **Data sources:** NOAA HRRR grib files (wind speed/direction, humidity), NWS fire-weather zones (CAP/GeoJSON), or Open-Meteo’s tiled API.
+- **Processing:** Batch convert the weather rasters into Mapbox-ready tiles (Tippecanoe for vector wind barbs, `rio-cogeo`/AWS for raster). Cache hourly slices so the client can switch timestamps quickly.
+- **Frontend:** Add a new overlay toggle group next to AQ. Each toggle would add a dedicated Mapbox layer (e.g., wind arrows, humidity heatmap, red-flag polygons) and share the existing legend slot.
+- **Automation:** Schedule a lightweight Cloud Function or GitHub Action to refresh weather tiles every 3 hours and publish to the CDN used by `map.html`.
+
+### 10. Search & “fires near me”
+
+- **Geocoder:** Use Mapbox’s Geocoding API + `@mapbox/mapbox-gl-geocoder` control to allow address/city searches. When a result is chosen, fly to it and display nearby fires.
+- **Proximity filter:** After geocoding (or using `navigator.geolocation`), compute distance (Haversine) from the user’s point to each perimeter centroid. Highlight the nearest 3 fires and optionally auto-open the popup for the closest one.
+- **Permissions:** Geolocation requires HTTPS + a user gesture. Provide a fallback (“Jump to my location” button) that gracefully degrades if the user declines.
+- **Shareable links:** Encode the selected fire ID or lat/lon in the URL hash so editors can deep-link to a specific incident.
+
+### 11. Historical archive & comparison mode
+
+- **Data capture:** Extend the data pipeline to snapshot the GeoJSON nightly (see `wildfire_snapshot.py` example). Store both the full feature set and summary stats in `data_sources/wildfire/snapshots/YYYY/MM/DD/*.json`.
+- **Charting:** Use the snapshots to power Datawrapper trend charts (acres by month, fire counts, containment averages) and expose the dataset via the existing GitHub Actions workflow.
+- **UI toggle:** Add a “Season compare” control that swaps the live source with a selected historical snapshot. Combine with the existing timeline slider to replay a past season day-by-day.
+- **Storage considerations:** A single season of daily snapshots is ~50–100 MB compressed. Include a retention policy (keep daily for current year, weekly for prior seasons) to minimize hosting costs.
 
 ---
 
