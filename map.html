@@ -58,7 +58,7 @@
         }
 
         .panel {
-            background: rgba(5, 8, 16, 0.58);
+            background: rgba(5, 8, 16, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.04);
             border-radius: 18px;
             padding: var(--panel-padding);
@@ -417,7 +417,7 @@
         }
 
         .mapboxgl-popup-content {
-            background: rgba(5, 8, 16, 0.6);
+            background: rgba(5, 8, 16, 0.4);
             border-radius: 14px;
             border: 1px solid rgba(255, 255, 255, 0.06);
             color: var(--text);
@@ -442,11 +442,8 @@
         }
 
         .mapboxgl-popup-tip {
-            border: none;
-            width: 2px;
-            height: 26px;
-            background: rgba(255, 255, 255, 0.3);
-            margin-top: -3px;
+            border-top-color: rgba(5, 8, 16, 0.4) !important;
+            border-bottom-color: rgba(5, 8, 16, 0.4) !important;
         }
 
         .popup h3 {
@@ -746,8 +743,8 @@
                 zoom: isMobile ? 5 : 6,
                 minZoom: 4,
                 maxBounds: [
-                    [-125, 31],
-                    [-112, 43]
+                    [-130, 30],
+                    [-110, 45]
                 ],
                 attributionControl: false
             });
@@ -1004,7 +1001,7 @@
                         id: 'wildfire-small-symbol',
                         type: 'symbol',
                         source: 'wildfires',
-                        filter: ['<', acresExpr, SMALL_FIRE_ACRES],
+                        filter: ['all', ['<', acresExpr, SMALL_FIRE_ACRES], ['<', ['zoom'], 8]],
                         layout: {
                             'text-field': '×',
                             'text-font': ['Arial Unicode MS Bold'],
@@ -1052,48 +1049,33 @@
             }
 
             function bindMapInteractions() {
-                map.on('mousemove', 'wildfire-fill', (event) => {
-                    const feature = event.features?.[0];
-                    if (!feature) return;
-                    hoverPopup.setLngLat(event.lngLat).setHTML(`<strong>${feature.properties.__primaryName}</strong>`).addTo(map);
-                });
-
-                map.on('mouseleave', 'wildfire-fill', () => {
-                    hoverPopup.remove();
-                });
-
-                map.on('mouseenter', 'wildfire-fill', () => {
-                    map.getCanvas().style.cursor = 'pointer';
-                });
-
-                map.on('mouseleave', 'wildfire-fill', () => {
-                    map.getCanvas().style.cursor = '';
-                });
-
-                map.on('click', 'wildfire-fill', (event) => {
-                    const feature = event.features?.[0];
-                    if (!feature) return;
-                    focusFeature(feature, { lngLat: [event.lngLat.lng, event.lngLat.lat] });
-                });
-
-                ['wildfire-small-symbol'].forEach((layerId) => {
-                    map.on('mouseenter', layerId, () => {
-                        map.getCanvas().style.cursor = 'pointer';
+                // Global click listener to catch features even if layer order is tricky
+                map.on('click', (event) => {
+                    const features = map.queryRenderedFeatures(event.point, {
+                        layers: ['wildfire-fill', 'wildfire-outline', 'wildfire-small-symbol']
                     });
-                    map.on('mouseleave', layerId, () => {
-                        map.getCanvas().style.cursor = '';
-                        hoverPopup.remove();
+                    if (features.length > 0) {
+                        focusFeature(features[0], { lngLat: [event.lngLat.lng, event.lngLat.lat] });
+                    }
+                });
+
+                // Cursor styling
+                ['wildfire-fill', 'wildfire-small-symbol'].forEach(layer => {
+                    map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
+                    map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
+                });
+
+                // Hover popup
+                map.on('mousemove', (event) => {
+                    const features = map.queryRenderedFeatures(event.point, {
+                        layers: ['wildfire-fill', 'wildfire-small-symbol']
                     });
-                    map.on('mousemove', layerId, (event) => {
-                        const feature = event.features?.[0];
-                        if (!feature) return;
+                    if (features.length > 0) {
+                        const feature = features[0];
                         hoverPopup.setLngLat(event.lngLat).setHTML(`<strong>${feature.properties.__primaryName}</strong>`).addTo(map);
-                    });
-                    map.on('click', layerId, (event) => {
-                        const feature = event.features?.[0];
-                        if (!feature) return;
-                        focusFeature(feature, { lngLat: [event.lngLat.lng, event.lngLat.lat] });
-                    });
+                    } else {
+                        hoverPopup.remove();
+                    }
                 });
             }
 
