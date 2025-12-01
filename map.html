@@ -1136,36 +1136,42 @@
                         id: 'wildfire-point-circle',
                         type: 'circle',
                         source: 'wildfires',
-                        filter: isPoint,
+                        filter: ['==', ['geometry-type'], 'Point'],
                         paint: {
                             'circle-radius': [
                                 'interpolate', ['linear'], ['zoom'],
-                                4, 6,
-                                10, 12
+                                4, 8,
+                                10, 14
                             ],
                             'circle-color': '#ff8c42',
-                            'circle-opacity': 0.8,
+                            'circle-opacity': 0.9,
                             'circle-stroke-color': '#b11226',
-                            'circle-stroke-width': 2,
-                            'circle-stroke-opacity': 0.9
+                            'circle-stroke-width': 2.5,
+                            'circle-stroke-opacity': 1
                         }
                     });
 
-                    // 7. Fire icon for point incidents
+                    // 7. X symbol for point incidents (matching polygon small fire style)
                     map.addLayer({
                         id: 'wildfire-point-symbol',
                         type: 'symbol',
                         source: 'wildfires',
-                        filter: isPoint,
+                        filter: ['==', ['geometry-type'], 'Point'],
                         layout: {
-                            'text-field': '🔥',
+                            'text-field': '×',
+                            'text-font': ['Arial Unicode MS Bold'],
                             'text-size': [
                                 'interpolate', ['linear'], ['zoom'],
-                                4, 12,
-                                10, 18
+                                4, 16,
+                                10, 24
                             ],
                             'text-allow-overlap': true,
                             'text-ignore-placement': true
+                        },
+                        paint: {
+                            'text-color': '#ffffff',
+                            'text-halo-color': '#b11226',
+                            'text-halo-width': 1
                         }
                     });
                 } else {
