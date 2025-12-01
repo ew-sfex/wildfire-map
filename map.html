@@ -683,7 +683,8 @@
             const MAPBOX_TOKEN = window.MAPBOX_ACCESS_TOKEN || document.body.dataset.mapboxToken || '';
             const DATAWRAPPER_CHART_ID = document.body.dataset.datawrapperChart || '';
             const TOP_FIRE_LIMIT = Number(document.body.dataset.topFires || 5);
-            const GEOJSON_ENDPOINT = 'https://us-central1-sf-live-charts.cloudfunctions.net/serveNIFCGeojson';
+            // Use NIFC ArcGIS endpoint directly - filtered to current perimeters for California
+            const GEOJSON_ENDPOINT = 'https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query?where=attr_POOState%3D%27US-CA%27&outFields=*&f=geojson';
             const DAY_MS = 86_400_000;
             const SIZE_BUCKETS = [
                 { id: 'mega', label: 'Mega • 100k+ acres', min: 100_000, max: null, color: '#ff4d4f' },
