@@ -912,6 +912,7 @@
                 );
 
                 console.log(`Perimeters: ${perimeters.features.length}, Incident points: ${incidents.features.length}`);
+                console.log('Perimeter names:', [...perimeterNames]);
 
                 // Mark all perimeter features as NOT points
                 perimeters.features.forEach(f => {
