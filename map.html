@@ -466,6 +466,16 @@
             line-height: 1.2;
         }
 
+        .popup-note {
+            margin: 6px 0 0 0;
+            padding-top: 6px;
+            font-size: var(--font-xs);
+            color: var(--muted);
+            font-style: italic;
+            border-top: 1px solid rgba(255,255,255,0.15);
+            line-height: 1.2;
+        }
+
         @media (max-width: 1100px) {
             .hud {
                 width: min(320px, calc(100% - 28px));
@@ -1252,6 +1262,7 @@
                 const containment = Number.isFinite(props.__containment) ? `${Math.round(props.__containment)}% contained` : 'Containment unknown';
                 const cause = props.attr_FireCause || 'Unknown';
                 const location = props.attr_IncidentShortDescription ? props.attr_IncidentShortDescription : '';
+                const isPointOnly = props.__featureType === 'point';
 
                 return `
                 <div class="popup">
@@ -1260,6 +1271,7 @@
                     <p class="popup-meta">${containment}</p>
                     <p class="popup-meta">Cause: ${cause}</p>
                     ${location ? `<p class="popup-meta">${location}</p>` : ''}
+                    ${isPointOnly ? `<p class="popup-note">Perimeter data not yet available</p>` : ''}
                 </div>
                 `;
             }
