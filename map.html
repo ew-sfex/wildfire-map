@@ -447,20 +447,23 @@
         }
 
         .popup h3 {
-            margin: 0 0 2px;
+            margin: 0 0 1px;
             font-size: var(--font-md);
+            line-height: 1.1;
         }
 
         .popup-metric {
             margin: 0;
             font-weight: 600;
             font-size: var(--font-md);
+            line-height: 1.2;
         }
 
         .popup-meta {
-            margin: 1px 0 0;
+            margin: 0;
             font-size: var(--font-sm);
             color: var(--muted);
+            line-height: 1.2;
         }
 
         @media (max-width: 1100px) {
@@ -739,12 +742,15 @@
             const map = new mapboxgl.Map({
                 container: 'map',
                 style: MAPBOX_STYLES[state.baseStyle],
-                center: [-119.4179, 36.7783],
-                zoom: isMobile ? 5 : 6,
+                bounds: [
+                    [-125.0, 32.0],
+                    [-113.5, 42.5]
+                ],
+                fitBoundsOptions: { padding: { top: 20, bottom: 20, left: 20, right: 320 } },
                 minZoom: 4,
                 maxBounds: [
-                    [-130, 30],
-                    [-110, 45]
+                    [-140, 20],
+                    [-100, 50]
                 ],
                 attributionControl: false
             });
@@ -997,11 +1003,13 @@
 
                 if (!map.getSource('wildfires')) {
                     map.addSource('wildfires', { type: 'geojson', data: state.geojson });
+                    // 1. Symbol for small fires (Zoom < 8)
                     map.addLayer({
                         id: 'wildfire-small-symbol',
                         type: 'symbol',
                         source: 'wildfires',
-                        filter: ['all', ['<', acresExpr, SMALL_FIRE_ACRES], ['<', ['zoom'], 8]],
+                        filter: ['<', acresExpr, SMALL_FIRE_ACRES],
+                        maxzoom: 8,
                         layout: {
                             'text-field': '×',
                             'text-font': ['Arial Unicode MS Bold'],
@@ -1013,23 +1021,55 @@
                             'text-color': '#ff8c42',
                             'text-halo-color': 'rgba(7, 10, 18, 0.9)',
                             'text-halo-width': 3,
-                            'text-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0.95, 7.5, 0]
+                            'text-opacity': 1
                         }
                     });
+
+                    // 2. Fill for LARGE fires (Always visible)
                     map.addLayer({
-                        id: 'wildfire-fill',
+                        id: 'wildfire-fill-large',
                         type: 'fill',
                         source: 'wildfires',
+                        filter: ['>=', acresExpr, SMALL_FIRE_ACRES],
                         paint: {
                             'fill-color': '#ff8c42',
                             'fill-opacity': 0.6
                         }
-                    },
-                    'wildfire-small-symbol');
+                    }, 'wildfire-small-symbol'); // Below symbol
+
+                    // 3. Fill for SMALL fires (Zoom >= 8 only)
                     map.addLayer({
-                        id: 'wildfire-outline',
+                        id: 'wildfire-fill-small',
+                        type: 'fill',
+                        source: 'wildfires',
+                        filter: ['<', acresExpr, SMALL_FIRE_ACRES],
+                        minzoom: 8,
+                        paint: {
+                            'fill-color': '#ff8c42',
+                            'fill-opacity': 0.6
+                        }
+                    }, 'wildfire-small-symbol');
+
+                    // 4. Outline for LARGE fires (Always visible)
+                    map.addLayer({
+                        id: 'wildfire-outline-large',
                         type: 'line',
                         source: 'wildfires',
+                        filter: ['>=', acresExpr, SMALL_FIRE_ACRES],
+                        paint: {
+                            'line-color': '#b11226',
+                            'line-width': 1.5,
+                            'line-opacity': 0.9
+                        }
+                    });
+
+                    // 5. Outline for SMALL fires (Zoom >= 8 only)
+                    map.addLayer({
+                        id: 'wildfire-outline-small',
+                        type: 'line',
+                        source: 'wildfires',
+                        filter: ['<', acresExpr, SMALL_FIRE_ACRES],
+                        minzoom: 8,
                         paint: {
                             'line-color': '#b11226',
                             'line-width': 1.5,
@@ -1049,26 +1089,42 @@
             }
 
             function bindMapInteractions() {
-                // Global click listener to catch features even if layer order is tricky
+                // Global click listener
                 map.on('click', (event) => {
                     const features = map.queryRenderedFeatures(event.point, {
-                        layers: ['wildfire-fill', 'wildfire-outline', 'wildfire-small-symbol']
+                        layers: [
+                            'wildfire-fill-large',
+                            'wildfire-fill-small',
+                            'wildfire-outline-large',
+                            'wildfire-outline-small',
+                            'wildfire-small-symbol'
+                        ]
                     });
+                    
                     if (features.length > 0) {
-                        focusFeature(features[0], { lngLat: [event.lngLat.lng, event.lngLat.lat] });
+                        const feature = features[0];
+                        // Ensure we have a valid feature before focusing
+                        if (feature.geometry && feature.properties) {
+                            focusFeature(feature, { lngLat: [event.lngLat.lng, event.lngLat.lat] });
+                        }
                     }
                 });
 
                 // Cursor styling
-                ['wildfire-fill', 'wildfire-small-symbol'].forEach(layer => {
+                const interactLayers = [
+                    'wildfire-fill-large',
+                    'wildfire-fill-small',
+                    'wildfire-small-symbol'
+                ];
+                interactLayers.forEach(layer => {
                     map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
                     map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
                 });
 
-                // Hover popup
+                // Hover popup (consolidated)
                 map.on('mousemove', (event) => {
                     const features = map.queryRenderedFeatures(event.point, {
-                        layers: ['wildfire-fill', 'wildfire-small-symbol']
+                        layers: interactLayers
                     });
                     if (features.length > 0) {
                         const feature = features[0];
