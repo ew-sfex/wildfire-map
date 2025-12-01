@@ -914,9 +914,9 @@
                 console.log(`Perimeters: ${perimeters.features.length}, Incident points: ${incidents.features.length}`);
                 console.log('Perimeter names:', [...perimeterNames]);
 
-                // Mark all perimeter features as NOT points
+                // Mark all perimeter features as NOT points (use string for reliable filter matching)
                 perimeters.features.forEach(f => {
-                    f.properties.__isPoint = false;
+                    f.properties.__featureType = 'polygon';
                 });
 
                 // Add incident points that DON'T have perimeters (avoid duplicates)
@@ -936,7 +936,7 @@
                     props.attr_FireCause = props.FireCause;
                     props.attr_POOState = props.POOState;
                     props.attr_POOCounty = props.POOCounty;
-                    props.__isPoint = true;
+                    props.__featureType = 'point';
                 });
 
                 // Combine: perimeters first, then points without perimeters
@@ -947,10 +947,10 @@
 
                 console.log(`Combined total: ${combined.features.length} fires`);
                 
-                // Debug: check __isPoint values
-                const pointCount = combined.features.filter(f => f.properties.__isPoint === true).length;
-                const nonPointCount = combined.features.filter(f => f.properties.__isPoint === false).length;
-                console.log(`DEBUG: __isPoint=true: ${pointCount}, __isPoint=false: ${nonPointCount}`);
+                // Debug: check __featureType values
+                const pointCount = combined.features.filter(f => f.properties.__featureType === 'point').length;
+                const polygonCount = combined.features.filter(f => f.properties.__featureType === 'polygon').length;
+                console.log(`DEBUG: __featureType=point: ${pointCount}, __featureType=polygon: ${polygonCount}`);
                 
                 return combined;
             }
@@ -1142,38 +1142,15 @@
                     });
 
                     // === POINT LAYERS (incidents without perimeters) ===
-                    // These layers only show features with __isPoint=true AND Point geometry
-                    const pointFilter = ['all', 
-                        ['==', ['get', '__isPoint'], true],
-                        ['==', ['geometry-type'], 'Point']
-                    ];
+                    // Only show features with __featureType='point' (incident points without perimeters)
+                    const pointLayerFilter = ['==', ['get', '__featureType'], 'point'];
                     
-                    // 6. Circle markers for point incidents
-                    map.addLayer({
-                        id: 'wildfire-point-circle',
-                        type: 'circle',
-                        source: 'wildfires',
-                        filter: pointFilter,
-                        paint: {
-                            'circle-radius': [
-                                'interpolate', ['linear'], ['zoom'],
-                                4, 10,
-                                10, 18
-                            ],
-                            'circle-color': '#ff6b35',
-                            'circle-opacity': 1,
-                            'circle-stroke-color': '#b11226',
-                            'circle-stroke-width': 3,
-                            'circle-stroke-opacity': 1
-                        }
-                    });
-
-                    // 7. X symbol for point incidents (matching polygon small fire style)
+                    // X symbol for point incidents (same style as small polygon fires)
                     map.addLayer({
                         id: 'wildfire-point-symbol',
                         type: 'symbol',
                         source: 'wildfires',
-                        filter: pointFilter,
+                        filter: pointLayerFilter,
                         layout: {
                             'text-field': '×',
                             'text-font': ['Arial Unicode MS Bold'],
@@ -1208,7 +1185,6 @@
                     'wildfire-small-symbol',
                     'wildfire-fill-large',
                     'wildfire-fill-small',
-                    'wildfire-point-circle',
                     'wildfire-point-symbol'
                 ];
 
@@ -1436,10 +1412,7 @@
                     ['==', ['geometry-type'], 'Polygon'],
                     ['==', ['geometry-type'], 'MultiPolygon']
                 ];
-                const isPoint = ['all', 
-                    ['==', ['get', '__isPoint'], true],
-                    ['==', ['geometry-type'], 'Point']
-                ];
+                const isPoint = ['==', ['get', '__featureType'], 'point'];
                 
                 const baseFilters = ['all'];
                 const sizeFilter = buildSizeFilterExpression();
@@ -1454,8 +1427,8 @@
                 const largePolyFilter = ['all', isPolygon, ...baseFilters.slice(1), ['>=', acresExpr, SMALL_FIRE_ACRES]];
                 // Polygon layers: Small fires (< SMALL_FIRE_ACRES)
                 const smallPolyFilter = ['all', isPolygon, ...baseFilters.slice(1), ['<', acresExpr, SMALL_FIRE_ACRES]];
-                // Point layers - must have __isPoint=true AND Point geometry
-                const pointFilter = ['all', ...isPoint.slice(1), ...baseFilters.slice(1)];
+                // Point layers - must have __featureType='point'
+                const pointFilter = ['all', isPoint, ...baseFilters.slice(1)];
 
                 map.setFilter('wildfire-fill-large', largePolyFilter);
                 map.setFilter('wildfire-outline-large', largePolyFilter);
@@ -1464,9 +1437,6 @@
                 map.setFilter('wildfire-small-symbol', smallPolyFilter);
                 
                 // Point layers
-                if (map.getLayer('wildfire-point-circle')) {
-                    map.setFilter('wildfire-point-circle', pointFilter);
-                }
                 if (map.getLayer('wildfire-point-symbol')) {
                     map.setFilter('wildfire-point-symbol', pointFilter);
                 }
