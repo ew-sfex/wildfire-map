@@ -1136,13 +1136,18 @@
                     });
 
                     // === POINT LAYERS (incidents without perimeters) ===
+                    // These layers only show features with __isPoint=true AND Point geometry
+                    const pointFilter = ['all', 
+                        ['==', ['get', '__isPoint'], true],
+                        ['==', ['geometry-type'], 'Point']
+                    ];
                     
                     // 6. Circle markers for point incidents
                     map.addLayer({
                         id: 'wildfire-point-circle',
                         type: 'circle',
                         source: 'wildfires',
-                        filter: ['==', ['get', '__isPoint'], true],
+                        filter: pointFilter,
                         paint: {
                             'circle-radius': [
                                 'interpolate', ['linear'], ['zoom'],
@@ -1162,7 +1167,7 @@
                         id: 'wildfire-point-symbol',
                         type: 'symbol',
                         source: 'wildfires',
-                        filter: ['==', ['get', '__isPoint'], true],
+                        filter: pointFilter,
                         layout: {
                             'text-field': '×',
                             'text-font': ['Arial Unicode MS Bold'],
@@ -1425,7 +1430,10 @@
                     ['==', ['geometry-type'], 'Polygon'],
                     ['==', ['geometry-type'], 'MultiPolygon']
                 ];
-                const isPoint = ['==', ['get', '__isPoint'], true];
+                const isPoint = ['all', 
+                    ['==', ['get', '__isPoint'], true],
+                    ['==', ['geometry-type'], 'Point']
+                ];
                 
                 const baseFilters = ['all'];
                 const sizeFilter = buildSizeFilterExpression();
@@ -1440,8 +1448,8 @@
                 const largePolyFilter = ['all', isPolygon, ...baseFilters.slice(1), ['>=', acresExpr, SMALL_FIRE_ACRES]];
                 // Polygon layers: Small fires (< SMALL_FIRE_ACRES)
                 const smallPolyFilter = ['all', isPolygon, ...baseFilters.slice(1), ['<', acresExpr, SMALL_FIRE_ACRES]];
-                // Point layers
-                const pointFilter = ['all', isPoint, ...baseFilters.slice(1)];
+                // Point layers - must have __isPoint=true AND Point geometry
+                const pointFilter = ['all', ...isPoint.slice(1), ...baseFilters.slice(1)];
 
                 map.setFilter('wildfire-fill-large', largePolyFilter);
                 map.setFilter('wildfire-outline-large', largePolyFilter);
