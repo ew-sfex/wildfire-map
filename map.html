@@ -1007,8 +1007,8 @@
                         filter: ['<', acresExpr, SMALL_FIRE_ACRES],
                         layout: {
                             'text-field': '×',
-                            'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-                            'text-size': ['interpolate', ['linear'], ['zoom'], 4, 18, 8, 26, 12, 34],
+                            'text-font': ['Arial Unicode MS Bold'],
+                            'text-size': 24,
                             'text-allow-overlap': true,
                             'text-ignore-placement': true
                         },
@@ -1025,12 +1025,7 @@
                         source: 'wildfires',
                         paint: {
                             'fill-color': '#ff8c42',
-                            'fill-opacity': [
-                                'case',
-                                ['<', acresExpr, SMALL_FIRE_ACRES],
-                                ['interpolate', ['linear'], ['zoom'], 4, 0.08, 8, 0.65],
-                                0.65
-                            ]
+                            'fill-opacity': 0.6
                         }
                     },
                     'wildfire-small-symbol');
@@ -1040,23 +1035,8 @@
                         source: 'wildfires',
                         paint: {
                             'line-color': '#b11226',
-                            'line-width': [
-                                'interpolate',
-                                ['linear'],
-                                ['zoom'],
-                                5,
-                                0.5,
-                                8,
-                                1.4,
-                                12,
-                                2.2
-                            ],
-                            'line-opacity': [
-                                'case',
-                                ['<', acresExpr, SMALL_FIRE_ACRES],
-                                ['interpolate', ['linear'], ['zoom'], 4, 0.05, 8, 0.9],
-                                0.9
-                            ]
+                            'line-width': 1.5,
+                            'line-opacity': 0.9
                         }
                     });
                 } else {
