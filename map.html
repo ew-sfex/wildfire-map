@@ -1136,17 +1136,17 @@
                         id: 'wildfire-point-circle',
                         type: 'circle',
                         source: 'wildfires',
-                        filter: ['==', ['geometry-type'], 'Point'],
+                        filter: ['==', ['get', '__isPoint'], true],
                         paint: {
                             'circle-radius': [
                                 'interpolate', ['linear'], ['zoom'],
-                                4, 8,
-                                10, 14
+                                4, 10,
+                                10, 18
                             ],
-                            'circle-color': '#ff8c42',
-                            'circle-opacity': 0.9,
+                            'circle-color': '#ff6b35',
+                            'circle-opacity': 1,
                             'circle-stroke-color': '#b11226',
-                            'circle-stroke-width': 2.5,
+                            'circle-stroke-width': 3,
                             'circle-stroke-opacity': 1
                         }
                     });
@@ -1156,14 +1156,14 @@
                         id: 'wildfire-point-symbol',
                         type: 'symbol',
                         source: 'wildfires',
-                        filter: ['==', ['geometry-type'], 'Point'],
+                        filter: ['==', ['get', '__isPoint'], true],
                         layout: {
                             'text-field': '×',
                             'text-font': ['Arial Unicode MS Bold'],
                             'text-size': [
                                 'interpolate', ['linear'], ['zoom'],
-                                4, 16,
-                                10, 24
+                                4, 20,
+                                10, 32
                             ],
                             'text-allow-overlap': true,
                             'text-ignore-placement': true
@@ -1171,7 +1171,7 @@
                         paint: {
                             'text-color': '#ffffff',
                             'text-halo-color': '#b11226',
-                            'text-halo-width': 1
+                            'text-halo-width': 2
                         }
                     });
                 } else {
@@ -1419,7 +1419,7 @@
                     ['==', ['geometry-type'], 'Polygon'],
                     ['==', ['geometry-type'], 'MultiPolygon']
                 ];
-                const isPoint = ['==', ['geometry-type'], 'Point'];
+                const isPoint = ['==', ['get', '__isPoint'], true];
                 
                 const baseFilters = ['all'];
                 const sizeFilter = buildSizeFilterExpression();
