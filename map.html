@@ -742,16 +742,9 @@
             const map = new mapboxgl.Map({
                 container: 'map',
                 style: MAPBOX_STYLES[state.baseStyle],
-                bounds: [
-                    [-125.0, 32.0],
-                    [-113.5, 42.5]
-                ],
-                fitBoundsOptions: { padding: { top: 20, bottom: 20, left: 20, right: 320 } },
+                center: [-119.5, 37.2], // Center of California
+                zoom: 5,
                 minZoom: 4,
-                maxBounds: [
-                    [-140, 20],
-                    [-100, 50]
-                ],
                 attributionControl: false
             });
 
@@ -1089,50 +1082,48 @@
             }
 
             function bindMapInteractions() {
-                // Global click listener
-                map.on('click', (event) => {
-                    const features = map.queryRenderedFeatures(event.point, {
-                        layers: [
-                            'wildfire-fill-large',
-                            'wildfire-fill-small',
-                            'wildfire-outline-large',
-                            'wildfire-outline-small',
-                            'wildfire-small-symbol'
-                        ]
+                const clickableLayers = [
+                    'wildfire-small-symbol',
+                    'wildfire-fill-large',
+                    'wildfire-fill-small'
+                ];
+
+                // Global click handler - query all wildfire layers
+                map.on('click', (e) => {
+                    console.log('Map click at:', e.lngLat);
+                    
+                    // Query features at click point from wildfire layers
+                    const features = map.queryRenderedFeatures(e.point, {
+                        layers: clickableLayers.filter(layer => map.getLayer(layer))
                     });
+                    
+                    console.log('Found features:', features.length);
                     
                     if (features.length > 0) {
                         const feature = features[0];
-                        // Ensure we have a valid feature before focusing
-                        if (feature.geometry && feature.properties) {
-                            focusFeature(feature, { lngLat: [event.lngLat.lng, event.lngLat.lat] });
-                        }
+                        console.log('Feature:', feature.properties.__primaryName);
+                        showFirePopup(feature, e.lngLat);
                     }
                 });
 
                 // Cursor styling
-                const interactLayers = [
-                    'wildfire-fill-large',
-                    'wildfire-fill-small',
-                    'wildfire-small-symbol'
-                ];
-                interactLayers.forEach(layer => {
-                    map.on('mouseenter', layer, () => map.getCanvas().style.cursor = 'pointer');
-                    map.on('mouseleave', layer, () => map.getCanvas().style.cursor = '');
-                });
-
-                // Hover popup (consolidated)
-                map.on('mousemove', (event) => {
-                    const features = map.queryRenderedFeatures(event.point, {
-                        layers: interactLayers
+                clickableLayers.forEach(layer => {
+                    map.on('mouseenter', layer, () => {
+                        map.getCanvas().style.cursor = 'pointer';
                     });
-                    if (features.length > 0) {
-                        const feature = features[0];
-                        hoverPopup.setLngLat(event.lngLat).setHTML(`<strong>${feature.properties.__primaryName}</strong>`).addTo(map);
-                    } else {
-                        hoverPopup.remove();
-                    }
+                    map.on('mouseleave', layer, () => {
+                        map.getCanvas().style.cursor = '';
+                    });
                 });
+            }
+
+            function showFirePopup(feature, lngLat) {
+                const props = feature.properties || {};
+                console.log('Showing popup for:', props.__primaryName);
+                clickPopup
+                    .setLngLat(lngLat)
+                    .setHTML(buildPopupHtml(props))
+                    .addTo(map);
             }
 
             function buildPopupHtml(props) {
@@ -1223,23 +1214,28 @@
             }
 
             function focusFeature(feature, options = {}) {
-                const bounds = feature.properties?.__bounds;
-                const centroid = feature.properties?.__centroid;
-                const padding = state.mapPadding || { top: 40, bottom: 40, left: 40, right: 40 };
-                const popupLocation = options.lngLat || (centroid ? [centroid.lng, centroid.lat] : null);
+                try {
+                    const bounds = feature.properties?.__bounds;
+                    const centroid = feature.properties?.__centroid;
+                    const padding = state.mapPadding || { top: 40, bottom: 40, left: 40, right: 40 };
+                    // Use provided lngLat (click point) or centroid
+                    const popupLocation = options.lngLat || (centroid ? [centroid.lng, centroid.lat] : null);
 
-                if (bounds) {
-                    map.fitBounds(bounds, {
-                        padding: { ...padding, right: padding.right + 60 },
-                        maxZoom: 11,
-                        duration: 1000
-                    });
-                } else if (centroid) {
-                    map.flyTo({ center: [centroid.lng, centroid.lat], zoom: 8, essential: true });
-                }
+                    if (bounds) {
+                        map.fitBounds(bounds, {
+                            padding: { ...padding, right: padding.right + 60 },
+                            maxZoom: 11,
+                            duration: 1000
+                        });
+                    } else if (centroid) {
+                        map.flyTo({ center: [centroid.lng, centroid.lat], zoom: 8, essential: true });
+                    }
 
-                if (popupLocation) {
-                    clickPopup.setLngLat(popupLocation).setHTML(buildPopupHtml(feature.properties)).addTo(map);
+                    if (popupLocation) {
+                        clickPopup.setLngLat(popupLocation).setHTML(buildPopupHtml(feature.properties)).addTo(map);
+                    }
+                } catch (err) {
+                    console.error('Focus failed:', err);
                 }
             }
 
@@ -1308,19 +1304,29 @@
             }
 
             function updateMapFilters() {
-                if (!map.getLayer('wildfire-fill')) return;
+                // Check for actual layer names
+                if (!map.getLayer('wildfire-fill-large')) return;
 
-                const filters = ['all'];
+                const acresExpr = ['coalesce', ['to-number', ['get', '__acres']], 0];
+                const baseFilters = ['all'];
                 const sizeFilter = buildSizeFilterExpression();
                 const containmentFilter = buildContainmentFilterExpression();
                 const timelineFilter = buildTimelineFilterExpression();
 
-                if (sizeFilter) filters.push(sizeFilter);
-                if (containmentFilter) filters.push(containmentFilter);
-                if (timelineFilter) filters.push(timelineFilter);
+                if (sizeFilter) baseFilters.push(sizeFilter);
+                if (containmentFilter) baseFilters.push(containmentFilter);
+                if (timelineFilter) baseFilters.push(timelineFilter);
 
-                map.setFilter('wildfire-fill', filters);
-                map.setFilter('wildfire-outline', filters);
+                // Large fires filter (>= SMALL_FIRE_ACRES)
+                const largeFilter = [...baseFilters, ['>=', acresExpr, SMALL_FIRE_ACRES]];
+                // Small fires filter (< SMALL_FIRE_ACRES)
+                const smallFilter = [...baseFilters, ['<', acresExpr, SMALL_FIRE_ACRES]];
+
+                map.setFilter('wildfire-fill-large', largeFilter);
+                map.setFilter('wildfire-outline-large', largeFilter);
+                map.setFilter('wildfire-fill-small', smallFilter);
+                map.setFilter('wildfire-outline-small', smallFilter);
+                map.setFilter('wildfire-small-symbol', smallFilter);
             }
 
             function buildSizeFilterExpression() {
@@ -1384,13 +1390,12 @@
 
             function applyMapPadding() {
                 if (!map) return;
-                const desktop = window.innerWidth > 980;
-                const rightPadding = desktop ? Math.min(380, window.innerWidth * 0.35) + 30 : 24;
+                // Symmetric padding - no asymmetric shift
                 state.mapPadding = {
-                    top: 24,
-                    bottom: 24,
-                    left: 24,
-                    right: rightPadding
+                    top: 20,
+                    bottom: 20,
+                    left: 20,
+                    right: 20
                 };
                 map.setPadding(state.mapPadding);
             }
