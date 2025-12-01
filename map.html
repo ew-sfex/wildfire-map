@@ -913,6 +913,11 @@
 
                 console.log(`Perimeters: ${perimeters.features.length}, Incident points: ${incidents.features.length}`);
 
+                // Mark all perimeter features as NOT points
+                perimeters.features.forEach(f => {
+                    f.properties.__isPoint = false;
+                });
+
                 // Add incident points that DON'T have perimeters (avoid duplicates)
                 const pointsWithoutPerimeters = incidents.features.filter(f => {
                     const name = (f.properties.IncidentName || '').toLowerCase().trim();
