@@ -608,18 +608,6 @@
         }
 
         @media (max-width: 980px) {
-            #map {
-                position: relative;
-                height: 60vh;
-            }
-
-            #last-update {
-                position: relative;
-                bottom: auto;
-                left: auto;
-                margin: 12px 0 0 16px;
-            }
-
             #error-banner {
                 top: auto;
                 bottom: 16px;
@@ -843,8 +831,23 @@
             });
 
             window.addEventListener('resize', () => {
+                map.resize();
                 applyMapPadding();
             });
+
+            // Keep the Mapbox canvas in lockstep with its container. When embedded
+            // in an iframe the container height can change after init (responsive
+            // CMS layouts), and without a resize the canvas keeps its stale size,
+            // leaving a dark gap below the map.
+            if (typeof ResizeObserver !== 'undefined') {
+                const mapEl = document.getElementById('map');
+                let resizeFrame = null;
+                const mapResizeObserver = new ResizeObserver(() => {
+                    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+                    resizeFrame = requestAnimationFrame(() => map.resize());
+                });
+                mapResizeObserver.observe(mapEl);
+            }
 
             function initializeStyleToggle() {
                 refs.styleButtons.forEach((button) => {
@@ -932,6 +935,18 @@
                 });
             }
 
+            function validateArcgisResponse(payload, label) {
+                if (payload && payload.error) {
+                    const detail = Array.isArray(payload.error.details) && payload.error.details.length
+                        ? ` ${payload.error.details.join(' ')}`
+                        : '';
+                    throw new Error(`${label}: ${payload.error.message || 'ArcGIS query failed'}.${detail}`);
+                }
+                if (!payload || !Array.isArray(payload.features)) {
+                    throw new Error(`${label}: unexpected response (no features returned).`);
+                }
+            }
+
             async function fetchAndMergeWildfireData() {
                 // Fetch both perimeters (polygons) and incident points in parallel
                 const [perimetersRes, incidentsRes] = await Promise.all([
@@ -948,6 +963,13 @@
 
                 const perimeters = await perimetersRes.json();
                 const incidents = await incidentsRes.json();
+
+                // ArcGIS returns HTTP 200 even for query failures (e.g. a 429
+                // "quota exceeded"), embedding an { error } object instead of a
+                // feature collection. Guard here so we surface a clear message
+                // instead of crashing on `undefined.features.map(...)`.
+                validateArcgisResponse(perimeters, 'Fire perimeters');
+                validateArcgisResponse(incidents, 'Incident points');
 
                 // Build a set of incident names that have perimeters
                 const perimeterNames = new Set(

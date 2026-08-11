@@ -7,7 +7,7 @@
 
 Interactive Mapbox GL experience showing active California wildfires in real-time. The page now renders a terrain/satellite basemap, overlays fire perimeters from the National Interagency Fire Center (NIFC), and layers Examiner-branded analytics (stats panel, top fires list, Datawrapper chart, filters, timeline slider, and air-quality tiles).
 
-**Live Map:** [View on SF Examiner](https://www.sfexaminer.com/wildfire-map) *(update with actual URL)*
+**Live Map:** [View on SF Examiner](https://www.sfexaminer.com/live-california-wildfire-map/article_a83f6bcc-4e05-11ef-89b3-479aeb623076.html)
 
 ---
 
